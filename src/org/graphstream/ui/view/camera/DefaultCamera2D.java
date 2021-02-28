@@ -113,7 +113,8 @@ public class DefaultCamera2D implements Camera {
 	protected Values padding = new Values(Units.GU, 0, 0, 0);
 
 	/** The rendering back-end. */
-	protected Backend bck = null;
+	protected Backend bckSwing = null;
+	protected Backend bckUhd = null;
 
 	/**
 	 * Which node is visible. This allows to mark invisible nodes to fasten
@@ -279,11 +280,11 @@ public class DefaultCamera2D implements Camera {
 		} else if (units == Units.GU && sprite.getUnits() == Units.PX) {
 			pos.x = sprite.getX();
 			pos.y = sprite.getY();
-			bck.inverseTransform(pos);
+			bckSwing.inverseTransform(pos);
 		} else if (units == Units.PX && sprite.getUnits() == Units.GU) {
 			pos.x = sprite.getX();
 			pos.y = sprite.getY();
-			bck.transform(pos);
+			bckSwing.transform(pos);
 		} else if (units == Units.GU && sprite.getUnits() == Units.PERCENTS) {
 			pos.x = metrics.lo.x + (sprite.getX() / 100f) * metrics.graphWidthGU();
 			pos.y = metrics.lo.y + (sprite.getY() / 100f) * metrics.graphHeightGU();
@@ -353,7 +354,7 @@ public class DefaultCamera2D implements Camera {
 		}
 
 		if (units == Units.PX)
-			bck.transform(pos);
+			bckSwing.transform(pos);
 
 		return pos;
 	}
@@ -384,19 +385,18 @@ public class DefaultCamera2D implements Camera {
 		pos.y = node.y + spriteY;
 
 		if (units == Units.PX)
-			bck.transform(pos);
+			bckSwing.transform(pos);
 
 		return pos;
 	}
 
 	public boolean nodeContains(GraphicElement elt, double x, double y) {
-
 		Values size = getNodeOrSpriteSize(elt);
 		double w2 = metrics.lengthToPx(size, 0) / 2;
 		double h2 = w2;
 		if (size.size() > 1)
 			h2 = metrics.lengthToPx(size, 1) / 2;
-		Point3 dst = bck.transform(elt.getX(), elt.getY(), 0);
+		Point3 dst = bckSwing.transform(elt.getX(), elt.getY(), 0);
 		double x1 = (dst.x) - w2;
 		double x2 = (dst.x) + w2;
 		double y1 = (dst.y) - h2;
@@ -421,7 +421,7 @@ public class DefaultCamera2D implements Camera {
 		double h2 = w2;
 		if (size.size() > 1)
 			h2 = metrics.lengthToPx(size, 1) / 2;
-		Point3 dst = bck.transform(elt.getX(), elt.getY(), 0);
+		Point3 dst = bckSwing.transform(elt.getX(), elt.getY(), 0);
 
 		double x1 = (dst.x) - w2;
 		double x2 = (dst.x) + w2;
@@ -494,7 +494,8 @@ public class DefaultCamera2D implements Camera {
 	 *            The graphic graph (used to check element visibility).
 	 */
 	public void pushView(GraphicGraph graph) {
-		bck.pushTransform();
+		bckSwing.pushTransform();
+		bckUhd.pushTransform();
 		setPadding(graph);
 
 		if (autoFit)
@@ -507,7 +508,8 @@ public class DefaultCamera2D implements Camera {
 
 	/** Restore the transform that was used before {@link #pushView()} is used. */
 	public void popView() {
-		bck.popTransform();
+		bckSwing.popTransform();
+		bckUhd.popTransform();
 	}
 
 	public void checkVisibility(GraphicGraph graph) {
@@ -564,7 +566,7 @@ public class DefaultCamera2D implements Camera {
 
 		Point3 src = new Point3(node.getX(), node.getY(), 0);
 
-		bck.transform(src);
+		bckSwing.transform(src);
 
 		double x1 = src.x - w2;
 		double x2 = src.x + w2;
@@ -592,7 +594,7 @@ public class DefaultCamera2D implements Camera {
 
 		Point3 src = new Point3(edge.getX(), edge.getY(), 0);
 
-		bck.transform(src);
+		bckSwing.transform(src);
 
 		double x1 = src.x - w2;
 		double x2 = src.x + w2;
@@ -652,16 +654,8 @@ public class DefaultCamera2D implements Camera {
 		else
 			sy = sx;
 
-		bck.beginTransform();
-		bck.setIdentity();
-		bck.translate(metrics.viewport[2] / 2, metrics.viewport[3] / 2, 0); // 4. Place the whole result at the center
-																			// of the view port.
-		if (rotation != 0)
-			bck.rotate(rotation / (180.0 / Math.PI), 0, 0, 1); // 3. Eventually apply a Z axis rotation.
-		bck.scale(sx, -sy, 0); // 2. Scale the graph to pixels. Scale -y since we reverse the view (top-left to
-								// bottom-left).
-		bck.translate(-tx, -ty, 0); // 1. Move the graph so that its real center is at (0,0).
-		bck.endTransform();
+		prepareTransformationMatrix(bckSwing, sx, sy, tx, ty);
+		prepareTransformationMatrix(bckUhd, sx, sy, tx, ty);
 
 		zoom = 1;
 
@@ -670,6 +664,7 @@ public class DefaultCamera2D implements Camera {
 		metrics.loVisible.copy(metrics.lo);
 		metrics.hiVisible.copy(metrics.hi);
 	}
+
 
 	/**
 	 * Compute a transformation that pass from graph units (user space) to a pixel
@@ -715,16 +710,8 @@ public class DefaultCamera2D implements Camera {
 		else
 			sy = sx;
 
-		bck.beginTransform();
-		bck.setIdentity();
-		bck.translate(metrics.viewport[2] / 2, metrics.viewport[3] / 2, 0); // 4. Place the whole result at the center
-																			// of the view port.
-		if (rotation != 0)
-			bck.rotate(rotation / (180.0 / Math.PI), 0, 0, 1); // 3. Eventually apply a rotation.
-		bck.scale(sx, -sy, 0); // 2. Scale the graph to pixels. Scale -y since we reverse the view (top-left to
-								// bottom-left).
-		bck.translate(-tx, -ty, 0); // 1. Move the graph so that the give center is at (0,0).
-		bck.endTransform();
+		prepareTransformationMatrix(bckSwing, sx, sy, tx, ty);
+		prepareTransformationMatrix(bckUhd, sx, sy, tx, ty);
 
 		metrics.ratioPx2Gu = sx;
 
@@ -733,6 +720,20 @@ public class DefaultCamera2D implements Camera {
 
 		metrics.loVisible.set(center.x - w2, center.y - h2);
 		metrics.hiVisible.set(center.x + w2, center.y + h2);
+	}
+
+
+	private void prepareTransformationMatrix(Backend bck, double sx, double sy, double tx, double ty) {
+		bck.beginTransform();
+		bck.setIdentity();
+		bck.translate(metrics.viewport[2] / 2, metrics.viewport[3] / 2, 0); // 4. Place the whole result at the center
+		// of the view port.
+		if (rotation != 0)
+			bck.rotate(rotation / (180.0 / Math.PI), 0, 0, 1); // 3. Eventually apply a Z axis rotation.
+		bck.scale(sx, -sy, 0); // 2. Scale the graph to pixels. Scale -y since we reverse the view (top-left to
+		// bottom-left).
+		bck.translate(-tx, -ty, 0); // 1. Move the graph so that its real center is at (0,0).
+		bck.endTransform();
 	}
 
 	public double paddingXgu() {
@@ -812,8 +813,12 @@ public class DefaultCamera2D implements Camera {
 		autoFit = on;
 	}
 
-	public void setBackend(Backend backend) {
-		this.bck = backend;
+	public void setSwingBackend(Backend backend) {
+		this.bckSwing = backend;
+	}
+
+	public void setUhdBackend(Backend backend) {
+		this.bckUhd = backend;
 	}
 
 	/**
@@ -822,7 +827,12 @@ public class DefaultCamera2D implements Camera {
 	 * @return The transformed point.
 	 */
 	public Point3 transformGuToPx(double x, double y, double z) {
-		return bck.transform(x, y, 0);
+		return bckUhd.transform(x, y, 0);
+	}
+
+
+	public Point3 transformGuToPxSwing(double x, double y, double z) {
+		return bckSwing.transform(x, y, 0);
 	}
 
 	/**
@@ -837,7 +847,11 @@ public class DefaultCamera2D implements Camera {
 	 * @return The resulting points in graph units.
 	 */
 	public Point3 transformPxToGu(double x, double y) {
-		return bck.inverseTransform(x, y, 0);
+		return bckUhd.inverseTransform(x, y, 0);
+	}
+
+	public Point3 transformPxToGuSwing(double x, double y) {
+		return bckSwing.inverseTransform(x, y, 0);
 	}
 
 	protected boolean styleVisible(GraphicElement element) {
