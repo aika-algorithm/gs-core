@@ -1,4 +1,4 @@
-# GraphStream
+# GraphStream 
 
 
 [![Build Status](https://travis-ci.org/graphstream/gs-core.svg?branch=dev)](https://travis-ci.org/graphstream/gs-core)
